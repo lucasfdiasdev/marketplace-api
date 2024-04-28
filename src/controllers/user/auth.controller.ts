@@ -5,13 +5,15 @@ import jwt, { Secret } from "jsonwebtoken";
 import { NextFunction, Request, Response } from "express";
 
 import {
-  IActivationToken,
   IRegisterBody,
+  IActivationToken,
+  IActivationRequest,
 } from "../../interfaces/user/auth.interface";
 import { sendMail } from "../../utils/sendMail";
 import { userModel } from "../../entities/user.entity";
 import { ErrorHandler } from "../../utils/ErrorHandler";
 import { CatchAsyncError } from "../../middleware/catchAsyncError";
+import { IUser } from "../../interfaces/user/user.interface";
 
 export const registerUser = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
@@ -70,3 +72,39 @@ export const createActivationToken = (user: any): IActivationToken => {
 
   return { token, activationCode };
 };
+
+export const activateUser = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { activation_token, activation_code } =
+        req.body as IActivationRequest;
+
+      const newUser: { user: IUser; activationCode: string } = jwt.verify(
+        activation_token,
+        process.env.JWT_ACTIVATION_SECRET as string
+      ) as { user: IUser; activationCode: string };
+
+      if (newUser.activationCode !== activation_code) {
+        return next(new ErrorHandler(400, "Código de ativação inválido!"));
+      }
+
+      const { email } = newUser.user;
+
+      const existUser = await userModel.findOne({ email });
+
+      if (existUser) {
+        return next(new ErrorHandler(400, "Email já cadastrado!"));
+      }
+      const user = await userModel.create({
+        email,
+      });
+
+      res.status(201).json({
+        success: true,
+        user,
+      });
+    } catch (error: any) {
+      return next(new ErrorHandler(500, error.message));
+    }
+  }
+);

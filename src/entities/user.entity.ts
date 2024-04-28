@@ -21,14 +21,6 @@ const userSchema: Schema<IUser> = new mongoose.Schema(
         message: "Por favor, insira um email valido.",
       },
     },
-    cpf: {
-      type: String,
-      unique: true,
-    },
-    phone: {
-      type: String,
-      unique: true,
-    },
     avatar: {
       public_id: String,
       url: String,
