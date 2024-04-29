@@ -6,14 +6,18 @@ import { NextFunction, Request, Response } from "express";
 
 import {
   IRegisterBody,
+  ILoginRequest,
   IActivationToken,
   IActivationRequest,
 } from "../../interfaces/user/auth.interface";
+import { IUser } from "../../interfaces/user/user.interface";
+
+import { sendToken } from "../../utils/jwt";
 import { sendMail } from "../../utils/sendMail";
 import { userModel } from "../../entities/user.entity";
 import { ErrorHandler } from "../../utils/ErrorHandler";
 import { CatchAsyncError } from "../../middleware/catchAsyncError";
-import { IUser } from "../../interfaces/user/user.interface";
+import { IUserVerifyOpt } from "../../interfaces/user/userVerifyOtp.interface";
 
 export const registerUser = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
@@ -47,6 +51,7 @@ export const registerUser = CatchAsyncError(
           template: "activation-mail.ejs",
           data,
         });
+
         res.status(201).json({
           message: `Please check your email: ${user.email} to active your account!`,
           activationToken: activationToken.token,
@@ -61,7 +66,9 @@ export const registerUser = CatchAsyncError(
 );
 
 export const createActivationToken = (user: any): IActivationToken => {
-  const activationCode = Math.floor(1000 + Math.random() * 9000).toString();
+  // generate 6 numbers of activation tokens
+  const activationCode = Math.floor(100000 + Math.random() * 900000).toString();
+
   const token = jwt.sign(
     { user, activationCode },
     process.env.JWT_ACTIVATION_SECRET as Secret,
@@ -103,6 +110,77 @@ export const activateUser = CatchAsyncError(
         success: true,
         user,
       });
+    } catch (error: any) {
+      return next(new ErrorHandler(500, error.message));
+    }
+  }
+);
+
+export const loginUser = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { email } = req.body as ILoginRequest;
+
+      if (!email) {
+        return next(new ErrorHandler(400, "Por favor, insira seu email."));
+      }
+
+      const user = await userModel.findOne({ email });
+
+      if (!user) {
+        return next(new ErrorHandler(400, "Usuário não encontrado!"));
+      }
+
+      const otp = await createVerityOTP(user);
+
+      await sendMail({
+        email: user.email,
+        subject: "Código de Verificação OTP",
+        template: "otp-mail.ejs",
+        data: { otp },
+      });
+
+      res.status(201).json({
+        message: `Please check your email: ${user.email} to active your account!`,
+      });
+    } catch (error: any) {
+      return next(new ErrorHandler(500, error.message));
+    }
+  }
+);
+
+export const createVerityOTP = async (user: any) => {
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+  user.otp = otp;
+  await user.save();
+
+  return otp;
+};
+
+export const verifyOtp = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { otp } = req.body as IUserVerifyOpt;
+
+      if (!otp) {
+        return next(new ErrorHandler(400, "Por favor, forneça o OTP."));
+      }
+
+      const user = await userModel.findOne({ otp });
+
+      if (!user) {
+        return next(new ErrorHandler(400, "Usuário não encontrado!"));
+      }
+
+      if (user.otp !== otp) {
+        return next(new ErrorHandler(400, "OTP inválido!"));
+      }
+
+      await user.save();
+
+      // Envie o token de autenticação
+      sendToken(user, 200, res);
     } catch (error: any) {
       return next(new ErrorHandler(500, error.message));
     }
