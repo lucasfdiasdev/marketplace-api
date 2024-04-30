@@ -12,6 +12,7 @@ import {
 } from "../../interfaces/user/auth.interface";
 import { IUser } from "../../interfaces/user/user.interface";
 
+import { redis } from "../../config/redis";
 import { sendToken } from "../../utils/jwt";
 import { sendMail } from "../../utils/sendMail";
 import { userModel } from "../../entities/user.entity";
@@ -181,6 +182,26 @@ export const verifyOtp = CatchAsyncError(
 
       // Envie o token de autenticação
       sendToken(user, 200, res);
+    } catch (error: any) {
+      return next(new ErrorHandler(500, error.message));
+    }
+  }
+);
+
+export const logoutUser = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.cookie("access_token", "", { maxAge: 1 });
+      res.cookie("refresh_token", "", { maxAge: 1 });
+
+      // delete user by id in redis
+      const userId = req.user?._id || "";
+      await redis.del(userId);
+
+      res.status(200).json({
+        success: true,
+        message: "Logged out successfully",
+      });
     } catch (error: any) {
       return next(new ErrorHandler(500, error.message));
     }

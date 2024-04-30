@@ -49,7 +49,7 @@ userSchema.methods.SignAccessToken = function () {
     { id: this._id },
     (process.env.JWT_ACCESS_TOKEN as Secret) || "",
     {
-      expiresIn: "5m",
+      expiresIn: "1d",
     }
   );
 };
